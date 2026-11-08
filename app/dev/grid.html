@@ -1,0 +1,38 @@
+<title>Render grid (dev)</title>
+<script src="../vendor/delaunator.min.js"></script>
+<canvas id="sheet"></canvas>
+<script type="module">
+import { loadModels } from '../js/detect.js';
+import { analyzePhoto } from '../js/analyze.js';
+import { Renderer } from '../js/render.js';
+async function load(src){ const img = new Image(); img.src = src; await img.decode(); return img; }
+window.run = async (momSrc, dadSrc, ages, opts) => {
+  await loadModels(()=>{});
+  const mom = await analyzePhoto(await load(momSrc));
+  const dad = await analyzePhoto(await load(dadSrc));
+  const r = new Renderer(); r.setParents(mom, dad);
+  const genes = { eyes: .5, brows: .5, nose: .5, mouth: .5, face: .5, skin: .5, texture: .5 };
+  const tw = 256, th = 320;
+  const sheet = document.getElementById('sheet'); sheet.width = tw * ages.length; sheet.height = th * 2 + th;
+  const ctx = sheet.getContext('2d');
+  ctx.drawImage(mom.aligned, 0, 0, tw, th); ctx.drawImage(dad.aligned, tw, 0, tw, th);
+  ctx.drawImage(mom.mask, 2*tw, 0, tw, th); ctx.drawImage(dad.mask, 3*tw, 0, tw, th);
+  const t0 = performance.now(); let n = 0;
+  ['girl','boy'].forEach((sex, row) => ages.forEach((age, k) => {
+    const res = r.render({ age, sex, genes, eye: opts.eye || mom.stats.eyeGuess, hair: opts.hair || 'mom', opts: { backdrop: 'studio', newbornWrap: true, facialHair: 'stubble', parentAge: 30, seed: 1, freckles: false, teenSkin: true, ...opts } });
+    ctx.drawImage(res.canvas, k * tw, th + row * th, tw, th); n++;
+  }));
+  const dt = (performance.now() - t0) / n;
+  return { dt, mom: { ...mom.stats, warnings: mom.warnings }, dad: { ...dad.stats, warnings: dad.warnings } };
+};
+window.single = async (momSrc, dadSrc, age, sex, opts={}) => {
+  await loadModels(()=>{});
+  const mom = await analyzePhoto(await load(momSrc));
+  const dad = await analyzePhoto(await load(dadSrc));
+  const r = new Renderer(); r.setParents(mom, dad);
+  const genes = { eyes: .5, brows: .5, nose: .5, mouth: .5, face: .5, skin: .5, texture: .5 };
+  const res = r.render({ age, sex, genes, eye: mom.stats.eyeGuess, hair: 'mom', opts: { backdrop: 'studio', newbornWrap: true, facialHair: 'stubble', parentAge: 30, seed: 1, ...opts } });
+  const sheet = document.getElementById('sheet'); sheet.width = 768; sheet.height = 960;
+  sheet.getContext('2d').drawImage(res.canvas, 0, 0);
+};
+</script>

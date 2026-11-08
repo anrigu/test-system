@@ -1,0 +1,10 @@
+import { createRequire } from 'node:module';
+const { chromium } = createRequire(import.meta.url)('playwright');
+const [,, mom, dad, out, age, sex, optsArg] = process.argv;
+const b = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const p = await b.newPage({ viewport: { width: 800, height: 1000 } });
+p.on('pageerror', e => console.log('pageerror:', e.message));
+await p.goto('http://localhost:8173/dev/grid.html');
+await p.evaluate(([a, b, age, sex, o]) => window.single(a, b, age, sex, o), ['/_test/' + mom, '/_test/' + dad, Number(age), sex, JSON.parse(optsArg || '{}')]);
+await p.locator('#sheet').screenshot({ path: out });
+await b.close();

@@ -1,0 +1,399 @@
+<title>Baby Face Forecast</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Take a photo of each parent and see your future daughter and son from birth to 90, rendered on your phone.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Kalam:wght@400;700&family=Young+Serif&display=swap">
+<style>
+/* Layout: one phone-width column on a pale nursery-wall ground; the hero is the portrait stage,
+   driven by a door-frame growth ruler (pencil marks, handwritten ages). */
+:root {
+  --bg: #edf1ee;
+  --surface: #ffffff;
+  --sunk: #e1e8e4;
+  --ink: #18221f;
+  --muted: #56645f;
+  --line: #ccd7d2;
+  --accent: #0c6a60;
+  --accent-ink: #ffffff;
+  --accent-soft: #d5ebe6;
+  --pencil: #d99a2b;
+  --warn: #8a5300;
+  --warn-bg: #fbefd9;
+  --danger: #a5372a;
+  --series-girl: #1f7fb8;
+  --series-boy: #c4620f;
+  --shadow: 0 1px 2px rgb(24 34 31 / 8%), 0 8px 24px rgb(24 34 31 / 8%);
+  --font-display: "Young Serif", Georgia, "Times New Roman", serif;
+  --font-body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-hand: "Kalam", "Bradley Hand", "Comic Sans MS", cursive;
+  --r: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101513; --surface: #19201d; --sunk: #222b27; --ink: #e6eeea; --muted: #9caea7; --line: #2e3a35;
+    --accent: #43b3a4; --accent-ink: #062019; --accent-soft: #173a34; --pencil: #f0b453;
+    --warn: #f3c37a; --warn-bg: #3a2c12; --danger: #ef8b7c; --series-girl: #3d97d4; --series-boy: #c87420;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101513; --surface: #19201d; --sunk: #222b27; --ink: #e6eeea; --muted: #9caea7; --line: #2e3a35;
+  --accent: #43b3a4; --accent-ink: #062019; --accent-soft: #173a34; --pencil: #f0b453;
+  --warn: #f3c37a; --warn-bg: #3a2c12; --danger: #ef8b7c; --series-girl: #3d97d4; --series-boy: #c87420;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px rgb(0 0 0 / 35%);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--bg); color: var(--ink); }
+body { font-family: var(--font-body); font-size: 16px; line-height: 1.5; -webkit-text-size-adjust: 100%; }
+.app {
+  max-width: 980px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 20px 48px;
+  display: grid; gap: 28px;
+}
+h1, h2, h3 { font-family: var(--font-display); font-weight: 400; text-wrap: balance; margin: 0; }
+h1 { font-size: clamp(30px, 8vw, 44px); line-height: 1.05; letter-spacing: -0.01em; }
+h2 { font-size: 24px; line-height: 1.15; }
+h3 { font-size: 19px; }
+p { margin: 0; }
+.lede { color: var(--muted); max-width: 60ch; margin-top: 8px; }
+.privacy { display: inline-flex; gap: 8px; align-items: center; margin-top: 12px; font-size: 14px; color: var(--accent); font-weight: 600; }
+.privacy svg { flex: none; }
+.step { font-family: var(--font-body); font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+section { display: grid; gap: 14px; min-width: 0; }
+
+/* buttons */
+.btn {
+  appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  font: 600 15px/1 var(--font-body); padding: 12px 16px; border-radius: 999px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; cursor: pointer; text-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:disabled { opacity: 0.55; cursor: progress; }
+.btn.small { min-height: 36px; padding: 8px 12px; font-size: 14px; }
+.btn.ghost { background: transparent; }
+:focus-visible { outline: 3px solid var(--pencil); outline-offset: 2px; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+/* parents */
+.parent-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.parent { background: var(--surface); border-radius: var(--r); padding: 10px; display: grid; gap: 8px; align-content: start; box-shadow: var(--shadow); min-width: 0; }
+.parent .who { font-family: var(--font-hand); font-size: 22px; line-height: 1; padding-left: 2px; }
+.slot { position: relative; aspect-ratio: 1; max-width: 100%; border-radius: 12px; overflow: hidden; background: var(--sunk); display: grid; place-items: center; }
+.slot canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.slot .ph { color: var(--muted); display: grid; justify-items: center; gap: 6px; font-size: 13px; text-align: center; padding: 8px; }
+.parent[data-state="busy"] .slot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / 35%) 50%, transparent 70%); background-size: 250% 100%; animation: sweep 1.2s linear infinite; }
+@keyframes sweep { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+.parent .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.parent .actions .btn { padding: 10px 6px; font-size: 14px; min-height: 40px; }
+.status { font-size: 13px; color: var(--muted); min-height: 1.2em; }
+.parent[data-state="error"] .status { color: var(--danger); }
+.parent[data-state="ready"] .status { color: var(--accent); }
+.traits { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 12px; padding: 3px 8px; border-radius: 999px; background: var(--sunk); color: var(--ink); }
+.warn { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.warn li { font-size: 12.5px; line-height: 1.35; background: var(--warn-bg); color: var(--warn); padding: 6px 8px; border-radius: 8px; }
+.engine { font-size: 13px; color: var(--muted); }
+.engine[data-state="error"] { color: var(--danger); }
+details.tips { background: var(--surface); border-radius: var(--r); padding: 12px 14px; }
+details.tips summary { cursor: pointer; font-weight: 600; }
+details.tips ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); }
+
+/* empty state */
+.empty { background: var(--surface); border-radius: var(--r); padding: 16px; display: grid; gap: 10px; }
+.empty .marks-preview { display: flex; flex-wrap: wrap; gap: 4px 14px; font-family: var(--font-hand); font-size: 20px; color: var(--muted); }
+.empty .marks-preview span::before { content: ""; display: inline-block; width: 14px; height: 2px; background: var(--pencil); vertical-align: middle; margin-right: 6px; }
+
+/* stage */
+.seg { display: inline-flex; background: var(--sunk); padding: 4px; border-radius: 999px; gap: 2px; justify-self: start; }
+.seg button { appearance: none; border: 0; background: transparent; color: var(--ink); font: 600 14px var(--font-body); padding: 8px 16px; border-radius: 999px; min-height: 36px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); box-shadow: var(--shadow); }
+.stage { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stage[data-view="girl"], .stage[data-view="boy"] { grid-template-columns: minmax(0, 420px); justify-content: center; }
+.portrait { margin: 0; position: relative; min-width: 0; }
+.portrait canvas { width: 100%; height: auto; aspect-ratio: 4 / 5; max-width: 100%; display: block; border-radius: 14px; background: var(--sunk); box-shadow: var(--shadow); }
+.portrait figcaption { position: absolute; left: 10px; top: 8px; font-family: var(--font-hand); font-size: 20px; color: #fff; text-shadow: 0 1px 3px rgb(0 0 0 / 55%); }
+.readout { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; }
+.readout .age { font-family: var(--font-display); font-size: 30px; line-height: 1.1; }
+.readout .height { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.note { color: var(--muted); max-width: 62ch; min-height: 3em; }
+
+/* growth ruler */
+.ruler { position: relative; padding: 10px 0 0; }
+.ruler .track { position: relative; height: 34px; border-radius: 6px; background:
+  repeating-linear-gradient(90deg, transparent 0 9px, var(--line) 9px 10px) bottom / 100% 10px no-repeat, var(--sunk); }
+.ruler input[type=range] { position: absolute; inset: 0; width: 100%; height: 34px; margin: 0; background: transparent; -webkit-appearance: none; appearance: none; cursor: pointer; }
+.ruler input[type=range]::-webkit-slider-runnable-track { height: 34px; background: transparent; }
+.ruler input[type=range]::-moz-range-track { height: 34px; background: transparent; }
+.ruler input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 28px; height: 44px; margin-top: -5px; background:
+  linear-gradient(var(--pencil), var(--pencil)) center / 4px 100% no-repeat; border: 0; }
+.ruler input[type=range]::-moz-range-thumb { width: 28px; height: 44px; border: 0; border-radius: 0; background: linear-gradient(var(--pencil), var(--pencil)) center / 4px 100% no-repeat; }
+.ruler .marks { position: relative; height: 34px; margin-top: 2px; }
+.ruler .tick { position: absolute; top: -12px; width: 2px; height: 10px; background: var(--muted); transform: translateX(-1px); opacity: 0.6; }
+.ruler .mark { position: absolute; top: 0; transform: translateX(-50%); appearance: none; border: 0; background: transparent; color: var(--muted); font: 400 18px/1 var(--font-hand); padding: 6px 4px; cursor: pointer; min-width: 24px; }
+.ruler .mark:hover { color: var(--ink); }
+.ruler .mark.first { transform: none; padding-left: 0; }
+.ruler .mark.last { transform: translateX(-100%); padding-right: 0; }
+
+/* sections */
+.card { background: var(--surface); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.card .hint { font-size: 14px; color: var(--muted); }
+.gallery { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.grow, .strip, .results-grid > * { min-width: 0; }
+.grow h4 { margin: 0 0 6px; font: 600 14px var(--font-body); color: var(--muted); }
+.strip { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 6px; scroll-snap-type: x proximity; }
+.thumb { appearance: none; border: 0; padding: 0; background: transparent; display: grid; gap: 2px; justify-items: center; cursor: pointer; scroll-snap-align: start; flex: none; }
+.thumb canvas { width: 84px; height: 105px; border-radius: 10px; background: var(--sunk); }
+.thumb span { font-family: var(--font-hand); font-size: 17px; color: var(--muted); }
+.gene { display: grid; grid-template-columns: 92px minmax(0, 1fr) 76px; align-items: center; gap: 10px; }
+.gene label { font-weight: 600; font-size: 14px; }
+.gene output { font-size: 13px; color: var(--muted); text-align: right; font-variant-numeric: tabular-nums; }
+.gene input { width: 100%; accent-color: var(--accent); }
+.scale { display: grid; grid-template-columns: 92px minmax(0, 1fr) 76px; gap: 10px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.scale span:nth-child(2) { display: flex; justify-content: space-between; }
+.trait-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.trait-grid h4 { margin: 0 0 8px; font: 600 15px var(--font-body); }
+.pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+.pick label { font-size: 12px; color: var(--muted); display: grid; gap: 4px; }
+select, input[type=text], input[type=number] { font: 500 15px var(--font-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; min-height: 42px; width: 100%; min-width: 0; }
+input[aria-invalid="true"] { border-color: var(--danger); }
+.odds-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.odds { appearance: none; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 6px 12px 6px 6px; display: inline-flex; align-items: center; gap: 8px; font: 500 14px var(--font-body); cursor: pointer; min-height: 38px; }
+.odds b { font-variant-numeric: tabular-nums; color: var(--muted); font-weight: 600; }
+.odds[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
+.swatch { width: 24px; height: 24px; border-radius: 50%; border: 1px solid rgb(0 0 0 / 15%); }
+.swatch[data-c="darkbrown"] { background: #3a2416; } .swatch[data-c="brown"] { background: #5c3c26; }
+.swatch[data-c="hazel"] { background: #7a6036; } .swatch[data-c="green"] { background: #58764e; }
+.swatch[data-c="blue"] { background: #5880a8; } .swatch[data-c="gray"] { background: #7a868e; }
+.swatch[data-c="black"] { background: #17120f; } .swatch[data-c="lightbrown"] { background: #8a6844; }
+.swatch[data-c="blonde"] { background: #c9a466; } .swatch[data-c="red"] { background: #9a4a26; }
+.sibs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.sib { appearance: none; border: 0; padding: 0; background: transparent; display: grid; gap: 4px; cursor: pointer; justify-items: center; min-width: 0; }
+.sib canvas { width: 100%; height: auto; aspect-ratio: 4 / 5; border-radius: 10px; background: var(--sunk); }
+.sib span { font-family: var(--font-hand); font-size: 17px; color: var(--muted); }
+.heights { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.heights label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.chart svg { width: 100%; height: auto; display: block; touch-action: none; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .axis { fill: var(--muted); font: 11px var(--font-body); }
+.chart .series { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chart .series.girl { stroke: var(--series-girl); } .chart .series.boy { stroke: var(--series-boy); }
+.chart .series.dim { opacity: 0.35; }
+.chart .dlabel { fill: var(--ink); font: 600 12px var(--font-body); }
+.chart .mline { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .dot { stroke: var(--surface); stroke-width: 2; }
+.chart .dot.girl { fill: var(--series-girl); } .chart .dot.boy { fill: var(--series-boy); }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.legend { display: flex; gap: 14px; font-size: 13px; color: var(--muted); }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; background: var(--series-girl); }
+.legend span.boy::before { background: var(--series-boy); }
+.tip { font-size: 13px; color: var(--ink); font-variant-numeric: tabular-nums; min-height: 1.4em; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.opts label { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.opts label.check { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 15px; min-height: 42px; }
+.opts input[type=checkbox] { width: 22px; height: 22px; accent-color: var(--accent); }
+.claude-out { font-size: 15px; max-width: 62ch; }
+footer { color: var(--muted); font-size: 14px; display: grid; gap: 10px; border-top: 1px solid var(--line); padding-top: 18px; }
+footer p { max-width: 68ch; }
+
+/* toast + preview */
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 999px; font-weight: 600; font-size: 14px; z-index: 30; max-width: calc(100vw - 32px); }
+.preview { position: fixed; inset: 0; z-index: 40; background: rgb(8 12 11 / 88%); display: grid; place-items: center; padding: calc(16px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.preview .inner { display: grid; gap: 12px; justify-items: center; max-width: 100%; }
+.preview img, .preview video { max-width: 100%; max-height: 72vh; border-radius: 12px; -webkit-touch-callout: default; }
+.preview p { color: #e7eeeb; text-align: center; }
+
+@media (min-width: 760px) {
+  .results-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .sticky { position: sticky; top: calc(12px + env(safe-area-inset-top, 0px)); }
+}
+@media (prefers-reduced-motion: reduce) { .parent[data-state="busy"] .slot::after { animation: none; } }
+</style>
+
+<div class="app">
+  <header>
+    <h1>Baby Face Forecast</h1>
+    <p class="lede">Take one photo of each parent. See your future daughter and son as newborns, through childhood and puberty, and all the way to 90.</p>
+    <p class="privacy"><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1 2.5 3.2v4.2C2.5 11 5 13.7 8 15c3-1.3 5.5-4 5.5-7.6V3.2L8 1Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>Faces are processed on this phone. Photos are never uploaded.</p>
+  </header>
+
+  <section aria-labelledby="parentsH">
+    <div>
+      <p class="step">Step 1</p>
+      <h2 id="parentsH">Photograph the parents</h2>
+    </div>
+    <div class="parent-grid">
+      <article class="parent" data-who="mom" data-state="empty">
+        <div class="who">Mom</div>
+        <div class="slot"><div class="ph"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><ellipse cx="22" cy="19" rx="10" ry="12.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 42c2-8 8.5-11.5 16-11.5S36 34 38 42" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Face the camera, neutral face</span></div></div>
+        <div class="actions">
+          <label class="btn primary"><input type="file" accept="image/*" capture="user" hidden><span class="add-label">Add photo</span></label>
+          <label class="btn"><input type="file" accept="image/*" hidden>Library</label>
+        </div>
+        <p class="status" role="status"></p>
+        <div class="traits"></div>
+        <ul class="warn"></ul>
+      </article>
+      <article class="parent" data-who="dad" data-state="empty">
+        <div class="who">Dad</div>
+        <div class="slot"><div class="ph"><svg width="44" height="44" viewBox="0 0 44 44" aria-hidden="true"><ellipse cx="22" cy="19" rx="10" ry="12.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 42c2-8 8.5-11.5 16-11.5S36 34 38 42" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Face the camera, neutral face</span></div></div>
+        <div class="actions">
+          <label class="btn primary"><input type="file" accept="image/*" capture="user" hidden><span class="add-label">Add photo</span></label>
+          <label class="btn"><input type="file" accept="image/*" hidden>Library</label>
+        </div>
+        <p class="status" role="status"></p>
+        <div class="traits"></div>
+        <ul class="warn"></ul>
+      </article>
+    </div>
+    <div class="row"><button class="btn small ghost" id="swap" type="button" hidden>Swap Mom and Dad</button></div>
+    <details class="tips">
+      <summary>Tips for the most realistic result</summary>
+      <ul>
+        <li>Hold the phone at eye level, about an arm's length away. Look straight into the lens.</li>
+        <li>Relaxed face with the mouth closed. Take off glasses and pull hair back from the face.</li>
+        <li>Face a window or soft light. Avoid flash, hats and strong shadows.</li>
+        <li>The hairstyle comes from Mom for the girl and from Dad for the boy. You can change that below.</li>
+      </ul>
+    </details>
+    <p class="engine" id="engine" data-state="loading">Loading face engine…</p>
+  </section>
+
+  <section class="empty" id="emptyState">
+    <h3>What you'll see</h3>
+    <p class="hint">Once both photos are in, you get a girl and a boy side by side, aging along a growth chart:</p>
+    <div class="marks-preview" aria-hidden="true"><span>birth</span><span>1</span><span>3</span><span>6</span><span>10</span><span>13</span><span>16</span><span>20</span><span>30</span><span>45</span><span>60</span><span>75</span><span>90</span></div>
+    <p class="hint">Plus gene sliders for each feature, eye and hair colour odds, possible siblings, a height forecast, and images or a video you can save.</p>
+  </section>
+
+  <section id="results" hidden aria-labelledby="kidsH">
+    <div>
+      <p class="step">Step 2</p>
+      <h2 id="kidsH">Meet your future kids</h2>
+    </div>
+    <div class="results-grid">
+      <div class="sticky" style="display:grid; gap:12px; min-width:0">
+        <div class="seg" id="viewSeg" role="group" aria-label="Show">
+          <button type="button" data-view="both">Both</button>
+          <button type="button" data-view="girl">Girl</button>
+          <button type="button" data-view="boy">Boy</button>
+        </div>
+        <div class="stage" id="stage" data-view="both">
+          <figure class="portrait" id="pGirl"><canvas width="768" height="960"></canvas><figcaption>Girl</figcaption></figure>
+          <figure class="portrait" id="pBoy"><canvas width="768" height="960"></canvas><figcaption>Boy</figcaption></figure>
+        </div>
+        <div class="readout"><span class="age" id="ageLabel">Newborn</span><span class="height" id="heightLabel"></span></div>
+        <div class="ruler">
+          <div class="track"><input type="range" id="age" min="0" max="1000" step="1" aria-label="Age"></div>
+          <div class="marks" id="marks"></div>
+        </div>
+        <p class="note" id="stageNote"></p>
+        <div class="row">
+          <button class="btn primary" id="play" type="button" aria-pressed="false">Play a lifetime</button>
+          <button class="btn" id="saveImg" type="button">Save image</button>
+          <button class="btn" id="savePoster" type="button">Save life poster</button>
+          <button class="btn" id="saveVideo" type="button" hidden>Save aging video</button>
+        </div>
+      </div>
+
+      <div style="display:grid; gap:16px; min-width:0">
+        <div class="card">
+          <h3>Life at a glance</h3>
+          <div class="gallery" id="gallery"></div>
+        </div>
+
+        <div class="card">
+          <h3>Genes</h3>
+          <p class="hint">Choose who each feature comes from. Shuffle to roll a new mix, like a different sibling.</p>
+          <div class="scale" aria-hidden="true"><span></span><span><span>Mom</span><span>Dad</span></span><span></span></div>
+          <div id="genes" style="display:grid; gap:10px"></div>
+          <div class="row"><button class="btn small" id="geneShuffle" type="button">Shuffle genes</button><button class="btn small ghost" id="geneEven" type="button">Even mix</button></div>
+        </div>
+
+        <div class="card">
+          <h3>Eyes and hair</h3>
+          <p class="hint">Detected from the photos. Fix them if the camera got it wrong, then tap a result to use it.</p>
+          <div class="trait-grid">
+            <div>
+              <h4>Eye colour</h4>
+              <div class="pick"><label>Mom<select id="momEye"></select></label><label>Dad<select id="dadEye"></select></label></div>
+              <div class="odds-list" id="eyeOdds"></div>
+            </div>
+            <div>
+              <h4>Hair colour</h4>
+              <div class="pick"><label>Mom<select id="momHair"></select></label><label>Dad<select id="dadHair"></select></label></div>
+              <div class="odds-list" id="hairOdds"></div>
+            </div>
+          </div>
+          <p class="hint">Odds use the simplified two-gene model taught in school. Real eye and hair colour involve many genes, so treat them as rough.</p>
+        </div>
+
+        <div class="card">
+          <h3>Possible siblings</h3>
+          <p class="hint">Same parents, different gene draws. Tap one to use its mix. <span id="sibAge"></span></p>
+          <div class="sibs" id="siblings"></div>
+          <div class="row"><button class="btn small" id="sibShuffle" type="button">Roll new siblings</button></div>
+        </div>
+
+        <div class="card">
+          <h3>Height forecast</h3>
+          <div class="heights">
+            <label>Mom's height<input type="text" id="momHeight" inputmode="decimal" placeholder="5'5&quot; or 165 cm" autocomplete="off"></label>
+            <label>Dad's height<input type="text" id="dadHeight" inputmode="decimal" placeholder="5'10&quot; or 178 cm" autocomplete="off"></label>
+          </div>
+          <p class="hint" id="heightEmpty">Add both heights to see how tall each child is likely to be at every age.</p>
+          <p class="hint" id="heightSummary" hidden></p>
+          <div class="legend" aria-hidden="true"><span>Girl</span><span class="boy">Boy</span></div>
+          <div class="chart" id="chart" hidden></div>
+          <p class="tip" id="chartTip" aria-live="polite"></p>
+        </div>
+
+        <div class="card">
+          <h3>Look and style</h3>
+          <div class="opts">
+            <label>Hairstyle from<select id="optHairFrom"><option value="auto">Same-sex parent</option><option value="mom">Mom</option><option value="dad">Dad</option></select></label>
+            <label>Background<select id="optBackdrop"><option value="studio">Studio grey</option><option value="warm">Warm</option><option value="sky">Soft blue</option><option value="charcoal">Charcoal</option><option value="original">Original photo</option></select></label>
+            <label>Baby outfit<select id="optBabyColor"><option value="cream">Cream</option><option value="sage">Sage</option><option value="blush">Blush</option><option value="sky">Sky</option></select></label>
+            <label>His facial hair<select id="optFacialHair"><option value="clean">Clean-shaven</option><option value="stubble">Stubble</option><option value="beard">Beard</option></select></label>
+            <label>Greying<select id="optGray"><option value="0.6">Late</option><option value="1">Average</option><option value="1.4">Early</option></select></label>
+            <label>Parents' age now<select id="optParentAge"><option value="20">About 20</option><option value="25">About 25</option><option value="30">About 30</option><option value="35">About 35</option><option value="40">About 40</option><option value="45">About 45</option><option value="50">About 50</option></select></label>
+            <label class="check"><input type="checkbox" id="optWrap">Newborn hat and blanket</label>
+            <label class="check"><input type="checkbox" id="optFreckles">Freckles</label>
+            <label class="check"><input type="checkbox" id="optTeen">Teen breakouts</label>
+          </div>
+        </div>
+
+        <div class="card" id="claudeBox" hidden>
+          <h3>Ask Claude to read the photos</h3>
+          <p class="hint">Optional. Sends the two face crops to Claude once to estimate eye colour, hair colour, freckles and age, and fills them in above.</p>
+          <div class="row"><button class="btn small" id="askClaude" type="button">Read traits with Claude</button></div>
+          <p class="claude-out" id="claudeOut" aria-live="polite"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p><strong>How it works.</strong> A face-landmark model finds 478 points on each parent. Their face shapes are mixed feature by feature, then reshaped with measured growth patterns: babies get a larger forehead and eyes, a shorter nose and a rounder jaw; puberty lengthens the jaw and nose for boys and fills the lips for girls; later decades add sagging, thinner lips, lines and grey hair. Skin and colour come from both photos, blended on your phone's graphics chip.</p>
+    <p>This is a forecast for fun, not a genetic test. Real children mix their parents in ways no photo can predict.</p>
+    <div class="row"><button class="btn small ghost" id="forget" type="button">Forget saved photos</button></div>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<div class="preview" id="preview" hidden>
+  <div class="inner">
+    <div id="previewMedia"></div>
+    <p id="previewHint"></p>
+    <button class="btn" id="previewClose" type="button">Done</button>
+  </div>
+</div>
+
+<script src="vendor/delaunator.min.js"></script>
+<script type="module" src="js/main.js"></script>

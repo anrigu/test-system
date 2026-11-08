@@ -1,0 +1,31 @@
+// Phone-sized end-to-end check: loads the app under the artifact-like CSP, adds two photos,
+// waits for the portraits, and saves screenshots. Usage: node tools/smoke-test.mjs mom.jpg dad.jpg outDir
+import { createRequire } from 'node:module';
+const { chromium, devices } = createRequire(import.meta.url)('playwright');
+const [,, mom, dad, outDir = '.', scheme = 'light'] = process.argv;
+const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const ctx = await browser.newContext({ ...devices['iPhone 13'], colorScheme: scheme, deviceScaleFactor: 1 });
+const page = await ctx.newPage();
+const errors = [];
+page.on('pageerror', (e) => errors.push('pageerror: ' + e.message));
+page.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()); });
+const t0 = Date.now();
+await page.goto('http://localhost:8173/');
+await page.screenshot({ path: `${outDir}/01-empty.png`, fullPage: true });
+await page.locator('.parent[data-who="mom"] input[type=file]:not([capture])').setInputFiles(mom);
+await page.locator('.parent[data-who="dad"] input[type=file]:not([capture])').setInputFiles(dad);
+await page.waitForSelector('#results:not([hidden])', { timeout: 60000 });
+await page.waitForTimeout(2500);
+console.log('ready after', Date.now() - t0, 'ms');
+await page.screenshot({ path: `${outDir}/02-results.png`, fullPage: true });
+await page.evaluate(() => { const a = document.querySelector('#age'); a.value = String(Math.round(window.__bff.ageToPos(16) * 1000)); a.dispatchEvent(new Event('input')); });
+await page.fill('#momHeight', '5\'5"'); await page.fill('#dadHeight', '180');
+await page.waitForTimeout(1500);
+await page.locator('#stage').screenshot({ path: `${outDir}/03-age16.png` });
+await page.locator('#chart').scrollIntoViewIfNeeded();
+await page.screenshot({ path: `${outDir}/04-full.png`, fullPage: true });
+await page.evaluate(() => { const a = document.querySelector('#age'); a.value = String(Math.round(window.__bff.ageToPos(1) * 1000)); a.dispatchEvent(new Event('input')); });
+await page.waitForTimeout(500);
+await page.locator('#stage').screenshot({ path: `${outDir}/05-age1.png` });
+console.log(errors.length ? errors.join('\n') : 'no console errors');
+await browser.close();
