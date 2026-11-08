@@ -9,6 +9,6 @@ p.on('pageerror', e => console.log('pageerror:', e.message));
 await p.goto('http://localhost:8173/dev/grid.html');
 const r = await p.evaluate(([a, b, ages, o]) => window.run(a, b, ages, o), ['/_test/' + mom, '/_test/' + dad, ages, JSON.parse(optsArg || '{}')]);
 console.log('ms/render', r.dt.toFixed(1));
-for (const who of ['mom', 'dad']) { const s = r[who]; console.log(who, 'eye', s.eyeGuess, s.irisLab?.map(v=>v.toFixed(0)), 'hair', s.hairGuess, s.hairLab?.map(v=>v.toFixed(0)), 'beard', s.beard.toFixed(2), 'lipstick', s.lipstick.toFixed(2), 'skin', s.skin.map(v=>v.toFixed(0)), s.warnings); }
+for (const who of ['mom', 'dad']) { const s = r[who]; console.log(who, 'ring', s.eyeRingRatio?.toFixed(3), 'lipstick', s.lipstick?.toFixed(2), 'eye', s.eyeGuess, s.irisLab?.map(v=>v.toFixed(0)), 'hair', s.hairGuess, s.hairLab?.map(v=>v.toFixed(0)), 'beard', s.beard.toFixed(2), 'lipstick', s.lipstick.toFixed(2), 'skin', s.skin.map(v=>v.toFixed(0)), s.warnings); }
 await p.locator('#sheet').screenshot({ path: out });
 await b.close();

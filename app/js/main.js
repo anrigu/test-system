@@ -2,7 +2,7 @@
 import { loadModels } from './detect.js';
 import { loadImageFile, analyzePhoto } from './analyze.js';
 import { Renderer } from './render.js';
-import { CW, CH, curve, clamp } from './mesh.js';
+import { CW, CH, IPD, EYE_Y, curve, clamp } from './mesh.js';
 import { eyeOdds, hairOdds, EYE_LABEL, HAIR_LABEL, adultHeight, heightAt, cmToFtIn, stageNote, ageLabel } from './genetics.js';
 import { savePhoto, loadPhoto, clearPhotos, loadSettings, saveSettings, clearSettings } from './store.js';
 
@@ -22,7 +22,7 @@ const defaults = () => ({
   genes: { eyes: 0.5, brows: 0.5, nose: 0.5, mouth: 0.5, face: 0.5, skin: 0.5, texture: 0.5 },
   eye: 'auto', hair: 'auto',
   parentEye: { mom: null, dad: null }, parentHair: { mom: null, dad: null },
-  opts: { hairFrom: 'auto', backdrop: 'studio', newbornWrap: true, babyColor: 'cream', facialHair: 'stubble', freckles: false, teenSkin: true, parentAge: 30, grayRate: 1, seed: 1 },
+  opts: { hairFrom: 'auto', backdrop: 'studio', newbornWrap: false, babyColor: 'cream', facialHair: 'stubble', freckles: false, teenSkin: true, parentAge: 30, grayRate: 1, seed: 1 },
   heights: { mom: '', dad: '' },
 });
 
@@ -691,8 +691,8 @@ async function setupClaude() {
 function cropBlob(res) {
   const c = document.createElement('canvas');
   c.width = 448; c.height = 448;
-  const side = 150 * 3.3;
-  c.getContext('2d').drawImage(res.aligned, CW / 2 - side / 2, 404 - side * 0.46, side, side, 0, 0, 448, 448);
+  const side = IPD * 3.3;
+  c.getContext('2d').drawImage(res.aligned, CW / 2 - side / 2, EYE_Y - side * 0.46, side, side, 0, 0, 448, 448);
   return new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9));
 }
 $('#askClaude').addEventListener('click', async () => {

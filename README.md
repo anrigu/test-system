@@ -1,7 +1,7 @@
 # Baby Face Forecast
 
-Take one photo of each parent on your phone and see your future daughter and son, from a
-newborn in a hospital cap through toddlerhood, school age, puberty, adulthood and old age (0 to 90).
+Take one photo of each parent on your phone and see your future daughter and son, from
+newborn through toddlerhood, school age, puberty, adulthood and old age (0 to 90).
 
 Everything runs in the phone's browser. Face detection, blending and rendering happen on the
 device; photos are never uploaded. (The only exception is the optional "Read traits with Claude"
@@ -13,6 +13,15 @@ button, which sends two face crops to Claude once, and only when you tap it.)
   Photo checks warn about a turned head, closed eyes, open mouth, big smile, dark or uneven light,
   small faces and cropped heads.
 - **Girl and boy side by side** at any age, with a growth-chart age ruler and "Play a lifetime" animation.
+- **Photographic merging** of the two faces, using techniques from face-morphing and face-swap research:
+  both parents are relit to one shared low-frequency lighting field before mixing; the face is mixed
+  band by band (shading and colour smoothly, feature edges and skin detail with sharper weights so
+  nothing doubles up); texture contrast lost by averaging is restored, following Tiddeman, Burt and
+  Perrett's wavelet texture method; and the merged face carries its skin tone into the hairline, ears
+  and neck. Eye makeup and lipstick are detected and not passed on to children.
+- **Babies from real photo content**: the hairstyle parent's real head, ears and neck are reshaped to
+  infant proportions, with the hair softened to fine baby hair and clothing turned into soft cotton.
+  A drawn hospital cap and blanket is available as an optional newborn style.
 - **Realistic ageing model**: per-feature blending of 478 face landmarks; baby proportions (bigger
   forehead and eyes, short upturned nose, round cheeks, faint brows, enlarged irises, smooth rosy
   skin, fine baby hair); puberty (jaw, chin, nose and brow growth and moustache fuzz for boys, fuller
@@ -46,11 +55,16 @@ the face, soft front light, whole head and shoulders in the frame.
 | Detect | `app/js/detect.js` | MediaPipe Face Landmarker (478 points, blendshapes) plus hair and person segmentation, all WASM on the CPU |
 | Analyse | `app/js/analyze.js` | Aligns each photo to a canonical frame by the eyes, measures skin, iris, hair, background and clothing colours, detects facial hair and lipstick, fills photo edges, runs quality checks |
 | Shape | `app/js/shape.js` | Blends the parents' landmarks per feature, then applies sex differences (ramping through puberty), craniofacial growth and adult ageing |
-| Render | `app/js/render.js`, `app/js/shaders.js` | WebGL2: warps both parents onto the child's mesh, colour-matches and blends skin, rebuilds the baby head and outfit, recolours and greys hair, then skin smoothing, brows, irises, lips, facial hair, wrinkles, spots and film grain |
+| Render | `app/js/render.js`, `app/js/shaders.js` | WebGL2: warps both parents onto the child's mesh, builds per-parent band pyramids, relights both to a shared lighting field, mixes low/mid/fine bands with texture-contrast restoration, softens baby hair and clothing, recolours and greys hair, then band-selective skin ageing, brows, irises, lips, facial hair, lines, spots and film grain |
 | Odds | `app/js/genetics.js` | Eye and hair colour odds, mid-parental height and CDC median growth curves, life-stage notes |
 | UI | `app/index.html`, `app/js/main.js` | Phone-first page, capture flow, ruler, gallery, genes, siblings, chart, saving |
 
 The forecast is for fun. Real children mix their parents in ways no photo can predict.
+
+References for the blending approach:
+[Pérez, Gangnet and Blake, *Poisson Image Editing* (2003)](https://www.cs.princeton.edu/courses/archive/fall14/cos526/papers/perez03.pdf);
+[Tiddeman, Burt and Perrett, *Prototyping and Transforming Facial Textures for Perception Research* (2001)](https://research-portal.st-andrews.ac.uk/en/publications/prototyping-and-transforming-facial-textures-for-perception-resea/);
+Burt and Adelson's multiresolution spline (Laplacian-pyramid blending).
 
 ## Development
 

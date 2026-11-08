@@ -311,6 +311,21 @@ export async function analyzePhoto(img) {
   const upperL = lum(robustMean([...sampleDisc(img8, A[50].x, A[50].y, r), ...sampleDisc(img8, A[280].x, A[280].y, r)]));
   const beard = lowerRgb && upperL ? clamp((upperL - lum(lowerRgb)) / (upperL * 0.32) - 0.25) : 0;
 
+  // --- Eye makeup (eyeliner / mascara / shadow): how dark the lash line is versus the skin ---
+  // Ring around each eye (lids and lash line, brows excluded); makeup makes its darkest part much darker.
+  const ringLum = [];
+  for (const contour of [EYE_R, EYE_L]) {
+    const poly = contour.map((i) => A[i]);
+    const cxy = poly.reduce((acc, q) => ({ x: acc.x + q.x / poly.length, y: acc.y + q.y / poly.length }), { x: 0, y: 0 });
+    for (const px of sampleDisc(img8, cxy.x, cxy.y, IPD * 0.3, (x, y) => y > cxy.y - IPD * 0.14 && !pointInPoly(x, y, poly) && hairAt(x, y) < 0.3)) {
+      ringLum.push(0.299 * px[0] + 0.587 * px[1] + 0.114 * px[2]);
+    }
+  }
+  ringLum.sort((a, b) => a - b);
+  const darkRing = ringLum.length ? ringLum[Math.floor(ringLum.length * 0.12)] : 0;
+  const skinL0 = lum(skin);
+  const eyeRingRatio = skinL0 ? darkRing / skinL0 : 1;
+
   // --- Lip colour (lipstick check) ---
   const lipPts = LIPS_OUTER.map((o, k) => ({ x: (A[o].x + A[LIPS_INNER[k]].x) / 2, y: (A[o].y + A[LIPS_INNER[k]].y) / 2 }));
   const lipPix = [];
@@ -387,11 +402,15 @@ export async function analyzePhoto(img) {
   pushPullFill(img8, maskData);
   for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
     const i = y * CW + x;
-    if (wasValid[i]) continue;
+    if (wasValid[i]) {
+      const e = validFrac(x, y, 16);
+      if (e < 0.98 && y > chinPx.y) maskData.data[i * 4 + 1] *= Math.min(1, Math.max(0, (e - 0.55) / 0.4));
+      continue;
+    }
+    // Fade to background just past the photo's edge (a soft portrait vignette, no smeared body).
     const f = Math.min(1, Math.max(0, (validFrac(x, y, 28) - 0.12) / 0.4));
-    const below = y > chinPx.y + IPD * 0.3 ? 1 : 0; // let the body continue downward
     maskData.data[i * 4] *= f;
-    maskData.data[i * 4 + 1] *= Math.max(f, below * 0.85);
+    maskData.data[i * 4 + 1] *= f;
   }
   // Is the whole head in the picture?
   const oc = { x: A[LM.foreheadTop].x, y: (A[LM.foreheadTop].y + A[LM.chin].y) / 2 };
@@ -420,7 +439,7 @@ export async function analyzePhoto(img) {
     aligned, mask, lm,
     stats: {
       skin, skinLab, hairRgb, hairLab, hairCoverage, irisRgb, irisLab, irisRadius,
-      beard, lipRgb, lipstick, yaw, srcIpd, bgRgb, clothRgb, earVisible,
+      beard, lipRgb, lipstick, eyeRingRatio, yaw, srcIpd, bgRgb, clothRgb, earVisible,
       eyeGuess: classifyEye(irisLab), hairGuess: classifyHair(hairLab),
     },
     warnings, thumb,

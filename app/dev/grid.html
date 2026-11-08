@@ -31,8 +31,8 @@ window.single = async (momSrc, dadSrc, age, sex, opts={}) => {
   const dad = await analyzePhoto(await load(dadSrc));
   const r = new Renderer(); r.setParents(mom, dad);
   const genes = { eyes: .5, brows: .5, nose: .5, mouth: .5, face: .5, skin: .5, texture: .5 };
-  const res = r.render({ age, sex, genes, eye: mom.stats.eyeGuess, hair: 'mom', opts: { backdrop: 'studio', newbornWrap: true, facialHair: 'stubble', parentAge: 30, seed: 1, ...opts } });
-  const sheet = document.getElementById('sheet'); sheet.width = 768; sheet.height = 960;
+  const res = r.render({ age, sex, genes, eye: mom.stats.eyeGuess, hair: 'mom', opts: { backdrop: 'studio', newbornWrap: false, facialHair: 'stubble', parentAge: 30, seed: 1, ...opts } });
+  const sheet = document.getElementById('sheet'); sheet.width = 1024; sheet.height = 1280;
   sheet.getContext('2d').drawImage(res.canvas, 0, 0);
 };
 </script>

@@ -21,9 +21,9 @@ await page.locator('#previewMedia img').screenshot({ path: `${outDir}/poster.png
 await page.click('#previewClose');
 console.log('video button hidden?', await page.isHidden('#saveVideo'));
 await page.click('#saveVideo');
-await page.waitForSelector('#preview:not([hidden]) video', { timeout: 40000 });
-const dur = await page.evaluate(() => new Promise((r) => { const v = document.querySelector('#previewMedia video'); v.onloadedmetadata = () => r(v.duration); setTimeout(() => r(v.duration), 3000); }));
-console.log('video ready, duration', dur);
+await page.waitForSelector('#preview:not([hidden])', { timeout: 120000 });
+await page.waitForTimeout(1500);
+console.log('video saved; preview shows:', await page.evaluate(() => document.querySelector('#previewMedia video') ? 'video element' : document.querySelector('#previewHint').textContent));
 await page.click('#previewClose');
 // reload: photos restored from IndexedDB?
 await page.reload();

@@ -112,18 +112,18 @@ export function childShape(lmM, lmD, inf, genes, age, sex, cfg = {}) {
     const G = (x, y) => {
       let gy;
       if (y < 0) gy = y * (1 + 0.08 * J);
-      else if (y <= yM) gy = y * (1 - 0.40 * J);
-      else gy = yM * (1 - 0.40 * J) + (y - yM) * (1 - 0.5 * J);
+      else if (y <= yM) gy = y * (1 - 0.36 * J);
+      else gy = yM * (1 - 0.36 * J) + (y - yM) * (1 - 0.46 * J);
       const gx = x * (1 + (y < 0 ? 0.03 * J : 0));
       return [gx, gy];
     };
     const feats = [
-      { c: eR, sx: 1 + 0.12 * J, sy: 1 + 0.16 * J, dy: 0, sig: [0.3, 0.19] },
-      { c: eL, sx: 1 + 0.12 * J, sy: 1 + 0.16 * J, dy: 0, sig: [0.3, 0.19] },
+      { c: eR, sx: 1 + 0.08 * J, sy: 1 + 0.11 * J, dy: 0, sig: [0.3, 0.19] },
+      { c: eL, sx: 1 + 0.08 * J, sy: 1 + 0.11 * J, dy: 0, sig: [0.3, 0.19] },
       { c: brR, sx: 1 - 0.06 * J, sy: 1 - 0.25 * J, dy: -0.05 * J, sig: [0.32, 0.11] },
       { c: brL, sx: 1 - 0.06 * J, sy: 1 - 0.25 * J, dy: -0.05 * J, sig: [0.32, 0.11] },
-      { c: noseC, sx: 1 - 0.18 * J, sy: 1 - 0.42 * J, dy: 0, sig: [0.22, 0.36] },
-      { c: mouthC, sx: 1 - 0.22 * J, sy: 1 - 0.14 * J, dy: 0, sig: [0.4, 0.2] },
+      { c: noseC, sx: 1 - 0.12 * J, sy: 1 - 0.34 * J, dy: 0, sig: [0.22, 0.36] },
+      { c: mouthC, sx: 1 - 0.18 * J, sy: 1 - 0.1 * J, dy: 0, sig: [0.4, 0.2] },
     ];
     for (const f of feats) f.gc = G(f.c[0], f.c[1]);
     for (let i = 0; i < N_LM; i++) {

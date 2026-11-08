@@ -71,6 +71,8 @@ uniform float uChinY, uCX, uEyeY;
 uniform vec3 uFabric, uFabric2, uStripe1, uStripe2;
 uniform float uHairClipY, uClothesL;
 uniform vec2 uFh[5];
+uniform sampler2D uMidM, uLowM, uMidD, uLowD;
+uniform float uLightFromBase, uFineBias, uHairTop, uBrowTop, uBabySoft;
 
 vec3 backdrop(vec2 uv){
   float r = length((uv - vec2(0.5, 0.42)) * vec2(1.0, 1.15));
@@ -106,7 +108,34 @@ void main(){
   // Hair, fringe included, always comes from the parent whose hairstyle is used.
   float anyHair = max(mm.r, md.r);
   wD = mix(wD, uBaseW, smoothstep(0.2, 0.65, anyHair));
-  vec3 col = mix(cm.rgb * uGainM, cd.rgb * uGainD, wD);
+
+  // --- Band-separated merge of the two parents ---
+  // 1. Lighting transfer: relight both parents to one low-frequency field (mostly the
+  //    hairstyle parent's light, so face, hair and neck share the same illumination).
+  vec3 XM = cm.rgb * uGainM, XD = cd.rgb * uGainD;
+  vec3 LM = texture(uLowM, vUV).rgb * uGainM, LD = texture(uLowD, vUV).rgb * uGainD;
+  vec3 QM = texture(uMidM, vUV).rgb * uGainM, QD = texture(uMidD, vUV).rgb * uGainD;
+  vec3 LB = uBaseW > 0.5 ? LD : LM;
+  vec3 Lt = mix(mix(LM, LD, wD), LB, uLightFromBase);
+  float relight = smoothstep(0.0, 0.5, face) * (1.0 - smoothstep(0.25, 0.65, anyHair));
+  vec3 rM = mix(vec3(1.0), clamp(Lt / max(LM, vec3(0.02)), 0.55, 1.8), relight);
+  vec3 rD = mix(vec3(1.0), clamp(Lt / max(LD, vec3(0.02)), 0.55, 1.8), relight);
+  // 2. Split into low (shading/colour), mid (feature edges, creases) and fine (pores, lashes) bands.
+  vec3 lowM = LM * rM, lowD = LD * rD;
+  vec3 midM = QM * rM - lowM, midD = QD * rD - lowD;
+  vec3 fineM = XM * rM - QM * rM, fineD = XD * rD - QD * rD;
+  // 3. Low band mixes smoothly; detail bands use sharper weights so edges don't double up.
+  float wMid = clamp((wD - 0.5) * 1.6 + 0.5, 0.0, 1.0);
+  float wFine = clamp((wD - 0.5) * 2.4 + 0.5 + uFineBias * smoothstep(0.0, 0.4, face), 0.0, 1.0);
+  vec3 lowX = mix(lowM, lowD, wD);
+  vec3 midX = mix(midM, midD, wMid);
+  vec3 fineX = mix(fineM, fineD, wFine);
+  // 4. Restore texture contrast lost by averaging (Tiddeman et al. texture enhancement).
+  float aMid = mix(abs(luma(midM)), abs(luma(midD)), wMid), cMid = abs(luma(midX));
+  float aFine = mix(abs(luma(fineM)), abs(luma(fineD)), wFine), cFine = abs(luma(fineX));
+  midX *= clamp((aMid + 0.004) / (cMid + 0.004), 1.0, 1.35);
+  fineX *= clamp((aFine + 0.003) / (cFine + 0.003), 1.0, 1.6);
+  vec3 col = clamp(lowX + midX + fineX, 0.0, 1.0);
   vec4 bm = uBaseW > 0.5 ? md : mm;
   float hair = bm.r;
   float person = max(bm.g, smoothstep(0.0, 0.35, face));
@@ -119,9 +148,10 @@ void main(){
   // Hair colour + greying (luminance-preserving recolour).
   float l = clamp(luma(col) / max(luma(uHairSrc), 0.03), 0.0, 3.0);
   vec3 rec = mix(col, uHairT * pow(l, 0.85), uHairRecolor);
-  float strand = vnoise(vec2(p.x * 0.09, p.y * 0.03) + uSeed) * 0.55 + vnoise(vec2(p.x * 0.6, p.y * 0.15)) * 0.25 + vnoise(p * 0.02) * 0.2;
-  float grayMix = clamp(uGray * 1.1 + (strand - 0.5) * 0.9 * (1.0 - uGray * 0.6), 0.0, 1.0) * step(0.01, uGray);
-  vec3 grayC = vec3(0.78, 0.77, 0.75) * (0.84 + 0.16 * clamp(log2(max(l, 0.05)), -1.5, 1.5) / 1.5);
+  float strand = vnoise(vec2(p.x * 0.05, p.y * 0.02) + uSeed) * 0.6 + vnoise(p * 0.015) * 0.4;
+  float grayMix = clamp(uGray * 1.15 + (strand - 0.5) * 0.5 * (1.0 - uGray * 0.7), 0.0, 1.0) * step(0.01, uGray);
+  // Grey keeps the hair's own light and shadow (strands, parting, volume), only the pigment goes.
+  vec3 grayC = vec3(0.85, 0.83, 0.79) * clamp(0.78 + 0.13 * log2(max(l, 0.05)), 0.5, 1.0);
   rec = mix(rec, grayC, grayMix);
   col = mix(col, rec, clamp(hair * 1.15, 0.0, 1.0));
 
@@ -132,98 +162,152 @@ void main(){
   }
   float skin = face * (1.0 - smoothstep(0.3, 0.8, hair));
 
-  // ---- Baby head: the parent's head with a bigger cranium, fine thin hair, small body ----
+  // ---- Babies and toddlers from the parent's real head: soft fine hair, baby-length, soft clothes ----
+  if (uBabySoft > 0.001) {
+    float notFaceS = 1.0 - smoothstep(0.3, 0.7, face);
+    vec3 QB = uBaseW > 0.5 ? QD : QM;
+    vec3 LBb = uBaseW > 0.5 ? LD : LM;
+    // Fine baby hair: the hairstyle's own shading, blurred (no styled strands), lighter and softer.
+    float lb = clamp(luma(QB) / max(luma(uHairSrc), 0.03), 0.0, 3.0);
+    vec3 softHair = mix(QB, uHairT * pow(lb, 0.7), uHairRecolor);
+    softHair = mix(softHair, softHair * 0.85 + uHairT * 0.25 + 0.02, 0.5);
+    vec3 scalpS = uSkinT * clamp(luma(LBb) / max(luma(uSkinT), 0.05), 0.6, 1.15);
+    // sparse at the hairline, fuller toward the crown
+    float hairEdge = smoothstep(0.35, 0.95, hair);
+    float thin = (1.0 - uFuzz) * (0.75 + 0.25 * (1.0 - hairEdge));
+    vec3 babyHair = mix(softHair, scalpS, thin * 0.5);
+    col = mix(col, babyHair, clamp(hair * 1.2, 0.0, 1.0) * uBabySoft);
+    // Long hair stops at about ear level, and big hairdos shrink to a soft baby-head outline.
+    float longHair = smoothstep(0.3, 0.6, hair) * smoothstep(uEyeY + uU * 0.12, uEyeY + uU * 0.42, p.y) * notFaceS;
+    float hdS = length((p - uHead.xy) / (uHead.zw * 1.06)) + (fbm(p * 0.02 + uSeed) - 0.5) * 0.06;
+    float volume = smoothstep(0.3, 0.6, hair) * smoothstep(0.97, 1.1, hdS) * notFaceS;
+    person *= 1.0 - max(longHair, volume) * uBabySoft;
+    // Clothes: soft-focus pastel cotton keeping the real fold shading.
+    float belowS = smoothstep(uChinY - uU * 0.06, uChinY + uU * 0.08, p.y) * (1.0 - smoothstep(0.65, 0.95, face));
+    vec3 cnS = col / max(luma(col), 0.02), snS = uSkinT / max(luma(uSkinT), 0.02);
+    float skinLikeS = (1.0 - smoothstep(0.12, 0.3, length(cnS - snS))) * smoothstep(0.35, 0.6, luma(col) / max(luma(uSkinT), 0.02));
+    float clothS = belowS * (1.0 - skinLikeS) * (1.0 - smoothstep(0.3, 0.7, hair));
+    float relS = clamp(luma(QB) / max(uClothesL, 0.03), 0.4, 1.8);
+    float foldS = fbm(vec2(p.x * 0.006 - p.y * 0.003, p.y * 0.005 + p.x * 0.002) + 7.0);
+    vec3 cotton = uFabric * clamp(0.84 + 0.18 * (relS - 1.0) + 0.12 * (foldS - 0.5), 0.6, 1.08);
+    col = mix(col, cotton, clothS * uBabySoft);
+  }
+
+  // ---- Baby (0-2.5): build a baby head instead of shrinking the parent's hairstyle ----
+  // Round cranium lit like the face, soft fine hair growing from a crown whorl with a diffuse
+  // hairline, small ears, short neck, cotton onesie. Optional newborn knit hat and swaddle.
   if (uBaby > 0.001) {
     vec2 hq = (p - uHead.xy) / uHead.zw;
     float hd = length(hq);
-    float aa = 1.5 / uHead.z;
+    float aa = 2.0 / uHead.z;
     float dx = abs(p.x - uCX);
-    hd += (vnoise(p * 0.35 + uSeed) - 0.5) * 0.02 + (vnoise(p * 0.08) - 0.5) * 0.02;
-    float cut = 1.0 - smoothstep(uEyeY + uU * 0.35, uEyeY + uU * 0.6, p.y);
-    float headIn = (1.0 - smoothstep(1.0 - 3.0 * aa, 1.0 + 2.0 * aa, hd)) * cut;
-    vec3 n = vec3(hq, sqrt(max(0.0, 1.0 - dot(hq, hq))));
-    float light = clamp(0.55 + 0.45 * dot(n, normalize(vec3(-0.25, -0.45, 0.85))), 0.0, 1.0);
-    vec3 fh = vec3(0.0); float fw = 0.0;
+    float faceM = smoothstep(0.02, 0.5, face);
+    float notFace = 1.0 - smoothstep(0.3, 0.7, face);
+    // Skin and light direction sampled from the merged forehead (hair-free taps only).
+    vec3 fh = vec3(0.0); float fw = 0.0; float lx = 0.0;
     for (int k = 0; k < 5; k++) {
       vec2 uv = uFh[k] / uSize;
       float hh = max(texture(uMaskM, uv).r, texture(uMaskD, uv).r);
       float w = 1.0 - smoothstep(0.2, 0.5, hh);
-      fh += blendAt(uFh[k]) * w; fw += w;
+      vec3 c = blendAt(uFh[k]);
+      fh += c * w; fw += w;
+      if (k == 1) lx -= luma(c) * w; if (k == 2) lx += luma(c) * w;
     }
     vec3 fore = fw > 0.2 ? fh / fw : uSkinT;
-    vec3 scalp = fore * (0.9 + 0.3 * (light - 0.75));
-    float crown = smoothstep(0.15, -0.7, hq.y);
-    float fuzzN = vnoise(vec2(p.x * 0.4 + p.y * 0.08, p.y * 0.1) + uSeed) * 0.6 + fbm(p * 0.03) * 0.4;
-    vec3 babyHair = uHairT * (0.8 + 0.4 * light);
-    vec3 fuzzScalp = mix(scalp, babyHair, clamp(uFuzz * crown * (0.35 + 0.9 * fuzzN), 0.0, 1.0));
-    float show = clamp((1.0 - uFuzz) * (0.8 + 0.4 * vnoise(p * 0.7 + uSeed)), 0.0, 1.0);
+    float lightX = clamp(lx / max(luma(fore), 0.05) * 1.5, -0.6, 0.6);
+    vec3 L = normalize(vec3(lightX, -0.45, 0.85));
+    vec3 n = normalize(vec3(hq, sqrt(max(0.02, 1.0 - dot(hq, hq)))));
+    float shade = clamp((0.56 + 0.5 * dot(n, L)) * (0.84 + 0.16 * n.z), 0.3, 1.08);
+    float cut = 1.0 - smoothstep(uEyeY + uU * 0.25, uEyeY + uU * 0.55, p.y);
+    float headIn = (1.0 - smoothstep(1.0 - aa, 1.0 + aa, hd)) * cut;
+    vec3 scalp = fore * (0.94 + 0.34 * (shade - 0.8)) * vec3(1.0, 0.985, 0.98);
+    // fine baby hair: strands radiate from a crown whorl, hairline soft and low at the temples
+    vec2 crown = uHead.xy + vec2(uHead.z * 0.12, -uHead.w * 0.72);
+    vec2 dir = normalize(p - crown + vec2(0.001));
+    vec2 across = vec2(-dir.y, dir.x);
+    float wisp = vnoise(vec2(dot(p, across) * 0.45, dot(p, dir) * 0.035) + uSeed) * 0.5 + vnoise(vec2(dot(p, across) * 1.2, dot(p, dir) * 0.08)) * 0.2 + fbm(p * 0.012 + uSeed) * 0.3;
+    float hl = min(uHairTop + uU * (0.06 + 0.42 * pow(dx / uU, 2.0)), uEyeY - uU * 0.1);
+    float zone = smoothstep(hl + uU * 0.16, hl - uU * 0.12, p.y) * smoothstep(1.06, 0.9, hd);
+    float hairA = clamp(uFuzz * zone * (0.35 + 0.75 * wisp), 0.0, 0.92);
+    vec3 hairC = mix(uHairT, scalp, 0.15) * (0.72 + 0.45 * shade) * (0.94 + 0.1 * wisp);
+    vec3 headCol = mix(scalp, hairC, hairA);
+    float fuzzRim = uFuzz * zone * smoothstep(0.98, 1.02, hd) * (1.0 - smoothstep(1.02, 1.06, hd)) * step(0.55, wisp) * cut;
 
-    vec3 bcol = col; float bper = person;
-    // long hair beyond the small head goes
-    float notFace = 1.0 - smoothstep(0.3, 0.7, face);
-    bper *= 1.0 - smoothstep(0.3, 0.7, hair) * (1.0 - headIn) * notFace;
-    bper *= 1.0 - (1.0 - smoothstep(uEyeY + uU * 0.15, uEyeY + uU * 0.4, p.y)) * (1.0 - headIn) * notFace;
-    // ears where the parent's are hidden
+    vec3 bcol = backdrop(vUV); float bper = 0.0;
+    // onesie: soft cotton, sloping shoulders, ribbed crew neck; slightly soft focus
+    float sh = max(0.0, dx - uU * 0.42);
+    float bodyTop = uChinY + uU * 0.06 + uU * 0.62 * pow(smoothstep(uU * 0.3, uU * 2.0, dx), 1.15);
+    float bodyIn = smoothstep(bodyTop - 2.5, bodyTop + 2.5, p.y) * (1.0 - smoothstep(uU * 2.3, uU * 2.45, dx));
+    float f1 = fbm(vec2(p.x * 0.006 - p.y * 0.003, p.y * 0.005 + p.x * 0.002) + 7.0);
+    float f2 = 0.5 + 0.5 * sin((p.x * 0.6 + p.y) / uU * 3.0 + f1 * 6.0);
+    vec3 fab = uFabric * (0.86 + 0.1 * f1 + 0.07 * f2) * (0.78 + 0.22 * cos(clamp(dx / (uU * 2.3), 0.0, 1.0) * 1.5708));
+    fab *= 1.0 + (vnoise(p * 0.8) - 0.5) * 0.03;
+    float rib = (1.0 - smoothstep(bodyTop + uU * 0.06, bodyTop + uU * 0.075, p.y)) * (1.0 - smoothstep(uU * 0.75, uU * 0.95, dx));
+    fab = mix(fab, uFabric2 * (0.88 + 0.06 * sin(p.x * 0.9)), rib * 0.85);
+    fab *= 1.0 - 0.28 * smoothstep(uU * 0.18, 0.0, p.y - bodyTop) * (1.0 - smoothstep(uU * 0.45, uU * 0.9, dx));
+    // short chubby neck in the shadow of the chin
+    float neckIn = (1.0 - smoothstep(uU * 0.3, uU * 0.42, dx)) * smoothstep(uChinY - uU * 0.3, uChinY - uU * 0.22, p.y);
+    vec3 neck = fore * mix(0.6, 0.82, smoothstep(uChinY, uChinY + uU * 0.12, p.y));
+    bcol = mix(bcol, neck, neckIn); bper = max(bper, neckIn);
+    bcol = mix(bcol, fab, bodyIn); bper = max(bper, bodyIn);
+    // ears
     for (int k = 0; k < 2; k++) {
       vec4 E = k == 0 ? uEarR : uEarL;
-      float on = k == 0 ? uEarProc.x : uEarProc.y;
       vec2 eq = (p - E.xy) / E.zw;
       float ed = length(eq);
-      float earIn = (1.0 - smoothstep(0.93, 1.05, ed)) * on * (1.0 - smoothstep(0.3, 0.7, bper));
+      float earIn = 1.0 - smoothstep(0.92, 1.06, ed);
       float outward = (k == 0 ? -eq.x : eq.x);
-      float rim = smoothstep(0.6, 0.95, ed);
-      float concha = 1.0 - smoothstep(0.2, 0.62, length((eq - vec2(k == 0 ? 0.2 : -0.2, 0.08)) * vec2(1.5, 1.0)));
-      vec3 ear = fore * vec3(1.03, 0.93, 0.91) * (0.7 + 0.22 * smoothstep(-0.6, 0.7, outward) + 0.1 * rim) * (1.0 - 0.22 * concha);
+      float rim = smoothstep(0.55, 0.95, ed);
+      float concha = 1.0 - smoothstep(0.15, 0.6, length((eq - vec2(k == 0 ? 0.22 : -0.22, 0.1)) * vec2(1.5, 1.0)));
+      vec3 ear = fore * vec3(1.04, 0.92, 0.9) * (0.66 + 0.24 * smoothstep(-0.6, 0.7, outward) + 0.12 * rim * shade) * (1.0 - 0.25 * concha);
       bcol = mix(bcol, ear, earIn); bper = max(bper, earIn);
     }
-    // cranium: thin the hair, fill where the cranium is bigger than the parent's head
-    vec3 headCol = mix(col, mix(col, fuzzScalp, show), smoothstep(0.2, 0.7, hair));
-    headCol = mix(fuzzScalp, headCol, smoothstep(0.3, 0.8, person) * (1.0 - smoothstep(0.3, 0.7, hair) * (1.0 - smoothstep(0.85, 0.95, hd))));
-    float headOnly = headIn * (1.0 - smoothstep(0.3, 0.7, face));
-    bcol = mix(bcol, headCol, headOnly); bper = max(bper, headIn);
-    // bangs on the forehead become skin
-    bcol = mix(bcol, fore * (0.95 + 0.08 * vnoise(p * 0.05)), smoothstep(0.12, 0.5, hair) * smoothstep(0.3, 0.7, face) * (1.0 - headOnly));
-    // Below the chin keep the parent's real neck and clothing folds, recoloured as a baby outfit.
-    float below = smoothstep(uChinY - uU * 0.05, uChinY + uU * 0.12, p.y) * notFace;
-    vec3 cn = col / max(luma(col), 0.02), sn = uSkinT / max(luma(uSkinT), 0.02);
-    float skinLike = (1.0 - smoothstep(0.12, 0.3, length(cn - sn))) * smoothstep(0.35, 0.6, luma(col) / max(luma(uSkinT), 0.02));
-    float clothes = below * (1.0 - skinLike * (1.0 - smoothstep(0.3, 0.7, hair)));
-    float rel = clamp(luma(col) / max(uClothesL, 0.03), 0.3, 2.0);
-    vec3 fab = knit(uFabric, p, uU) * clamp(0.78 + 0.28 * (rel - 1.0), 0.5, 1.15);
-    bcol = mix(bcol, fab, clothes * smoothstep(0.2, 0.6, bper));
-    float bskin = max(skin, headOnly * (1.0 - show * hair));
+    // cranium, then the merged face on top with the same soft hair over the hairline
+    bcol = mix(bcol, headCol, headIn); bper = max(bper, headIn);
+    bcol = mix(bcol, hairC, fuzzRim * 0.55); bper = max(bper, fuzzRim * 0.55);
+    faceM *= smoothstep(uBrowTop - uU * 0.62, uBrowTop - uU * 0.32, p.y) * (1.0 - headIn * (1.0 - smoothstep(0.3, 0.9, face))) + headIn * 0.0;
+    faceM = max(faceM, smoothstep(0.55, 0.9, face) * smoothstep(uBrowTop - uU * 0.62, uBrowTop - uU * 0.32, p.y));
+    vec3 fcol = mix(col, scalp, smoothstep(0.12, 0.5, hair));
+    fcol = mix(fcol, hairC, hairA * smoothstep(0.2, 0.8, face) * smoothstep(hl + uU * 0.1, hl - uU * 0.05, p.y));
+    bcol = mix(bcol, fcol, faceM); bper = max(bper, faceM);
+    float bskin = max(faceM * (1.0 - hairA), headIn * (1.0 - hairA) * (1.0 - faceM));
 
     if (uWrap > 0.5) {
-      // knit newborn hat
+      // stretchy knit newborn cap with two soft stripes on the folded cuff
       float hx = (p.x - uHead.x) / uHead.z;
       float brim = uHatBrim + uHatCurve * hx * hx;
-      float hq2 = length((p - uHead.xy) / (uHead.zw * vec2(1.06, 1.05)));
-      float hatIn = (1.0 - smoothstep(0.985, 1.0 + 3.0 * aa, hq2 + 0.02 * vnoise(p * 0.5))) * (1.0 - smoothstep(brim - 1.5, brim + 1.5, p.y));
+      vec2 hq2 = (p - uHead.xy) / (uHead.zw * vec2(1.05, 1.04));
+      float edgeN = (vnoise(p * 0.6) - 0.5) * 0.015;
+      float hatIn = (1.0 - smoothstep(1.0 - aa, 1.0 + 2.0 * aa, length(hq2) + edgeN)) * (1.0 - smoothstep(brim - 2.0, brim + 2.0, p.y));
       float v = (brim - p.y) / uU;
-      vec3 hn = vec3(hx, (p.y - uHead.y) / uHead.w, 0.0); hn.z = sqrt(max(0.0, 1.0 - dot(hn.xy, hn.xy)));
-      float hl = clamp(0.5 + 0.5 * dot(hn, normalize(vec3(-0.3, -0.5, 0.8))), 0.0, 1.0);
-      float s1 = smoothstep(0.06, 0.075, v) * (1.0 - smoothstep(0.115, 0.13, v));
-      float s2 = smoothstep(0.16, 0.175, v) * (1.0 - smoothstep(0.215, 0.23, v));
-      vec3 hc = mix(vec3(0.95, 0.94, 0.92), uStripe1, s1); hc = mix(hc, uStripe2, s2);
-      float ribs = 0.5 + 0.5 * sin(hx * 70.0);
-      hc *= (0.6 + 0.44 * hl) * (0.93 + 0.07 * ribs);
-      hc *= 1.0 - 0.22 * (smoothstep(0.24, 0.28, v) * (1.0 - smoothstep(0.28, 0.33, v)));
-      hc += (vnoise(p * 0.8) - 0.5) * 0.04;
-      float shadow = smoothstep(brim + uU * 0.12, brim, p.y) * (1.0 - hatIn);
-      bcol *= 1.0 - 0.2 * shadow * smoothstep(0.02, 0.5, face);
+      vec3 hn = normalize(vec3(hq2, sqrt(max(0.02, 1.0 - dot(hq2, hq2)))));
+      float hs = clamp(0.55 + 0.5 * dot(hn, L), 0.3, 1.05);
+      float stitch = abs(fract(hx * 38.0) - 0.5) * 2.0;
+      float row = abs(fract(v * 26.0 + stitch * 0.35) - 0.5) * 2.0;
+      vec3 hc = vec3(0.95, 0.94, 0.91) * (0.96 + 0.035 * stitch + 0.02 * row);
+      float s1 = smoothstep(0.07, 0.085, v) * (1.0 - smoothstep(0.115, 0.13, v));
+      float s2 = smoothstep(0.16, 0.175, v) * (1.0 - smoothstep(0.205, 0.22, v));
+      hc = mix(hc, uStripe1 * (0.95 + 0.04 * stitch), s1 * 0.75); hc = mix(hc, uStripe2 * (0.95 + 0.04 * stitch), s2 * 0.75);
+      float cuffLine = smoothstep(0.25, 0.27, v) * (1.0 - smoothstep(0.27, 0.31, v));
+      hc *= hs * (1.0 - 0.12 * cuffLine);
+      float shadow = smoothstep(brim + uU * 0.1, brim, p.y) * (1.0 - hatIn);
+      bcol *= 1.0 - 0.18 * shadow * faceM;
       bcol = mix(bcol, hc, hatIn); bper = max(bper, hatIn);
       bskin *= 1.0 - hatIn;
-      // hospital blanket wrapped up to the cheeks
+      // flannel receiving blanket wrapped up to the cheeks
       float ysw = uChinY - uU * 0.03 - uU * 1.05 * pow(smoothstep(uU * 0.4, uU * 1.75, dx), 1.3);
-      float wob = (fbm(p * 0.02 + 5.0) - 0.5) * uU * 0.12;
-      float sw = smoothstep(ysw + wob - 2.0, ysw + wob + 2.0, p.y) * (1.0 - smoothstep(0.55, 0.9, face) * (1.0 - smoothstep(uChinY - uU * 0.1, uChinY + uU * 0.1, p.y)));
-      float bf = fbm(vec2(p.x * 0.012 + p.y * 0.008, p.y * 0.02 - p.x * 0.004) * 1.5);
-      vec3 blank = vec3(0.96, 0.95, 0.93) * (0.75 + 0.35 * bf);
-      float st = (p.y - ysw) / uU;
-      float band1 = smoothstep(0.55, 0.58, st) * (1.0 - smoothstep(0.66, 0.69, st));
-      float band2 = smoothstep(0.78, 0.81, st) * (1.0 - smoothstep(0.84, 0.87, st));
-      blank = mix(blank, uStripe2 * (0.8 + 0.3 * bf), band1 * 0.85); blank = mix(blank, uStripe1 * (0.8 + 0.3 * bf), band2 * 0.85);
-      blank *= 1.0 - 0.25 * smoothstep(uU * 0.18, 0.0, abs(p.y - ysw - wob)) * step(ysw + wob, p.y + 1.0);
+      float wob = (fbm(p * 0.015 + 5.0) - 0.5) * uU * 0.1;
+      float sw = smoothstep(ysw + wob - 2.5, ysw + wob + 2.5, p.y) * (1.0 - smoothstep(0.55, 0.9, face) * (1.0 - smoothstep(uChinY - uU * 0.1, uChinY + uU * 0.1, p.y)));
+      float g1 = fbm(vec2(p.x * 0.004 + p.y * 0.003, p.y * 0.004 - p.x * 0.002) + 3.0);
+      float fold = 0.5 + 0.5 * sin((p.x * 0.8 - p.y * 0.6) / uU * 2.4 + g1 * 7.0);
+      float fold2 = 0.5 + 0.5 * sin((p.x * 0.3 + p.y) / uU * 3.1 + g1 * 5.0);
+      float bshade = 0.78 + 0.16 * fold + 0.08 * fold2 + 0.06 * (g1 - 0.5);
+      vec3 blank = vec3(0.95, 0.94, 0.92) * bshade * (1.0 + (vnoise(p * 0.7) - 0.5) * 0.02);
+      float st = (p.y - ysw) / uU + (g1 - 0.5) * 0.15;
+      float band1 = smoothstep(0.55, 0.58, st) * (1.0 - smoothstep(0.65, 0.68, st));
+      float band2 = smoothstep(0.76, 0.79, st) * (1.0 - smoothstep(0.83, 0.86, st));
+      blank = mix(blank, uStripe2 * bshade, band1 * 0.6); blank = mix(blank, uStripe1 * bshade, band2 * 0.6);
+      blank *= 1.0 - 0.22 * smoothstep(uU * 0.16, 0.0, abs(p.y - ysw - wob)) * step(ysw + wob, p.y + 1.0);
       bcol = mix(bcol, blank, sw); bper = max(bper, sw);
       bskin *= 1.0 - sw;
     }
@@ -258,7 +342,7 @@ uniform vec3 uSkinT, uLipSrc;
 uniform vec4 uIrisR, uIrisL; uniform float uIrisMag, uEyeRecolor; uniform vec3 uEyeColor; uniform float uIrisSrcL;
 uniform float uStubble, uBeard, uMustache; uniform vec3 uBeardColor;
 uniform float uWrinkleAmt, uFreckles, uAgeSpots, uAcne, uSkinAge, uUnderEye;
-uniform float uVignette, uGrain;
+uniform float uVignette, uGrain, uAgeDetail, uSkinGrain;
 
 vec3 sampleC(vec2 px){ return texture(uComp, px / uSize).rgb; }
 
@@ -276,6 +360,11 @@ void main(){
   vec3 det2 = b1 - b2;
   float keep2 = smoothstep(0.06, 0.18, length(det2));
   col = col - det2 * uSmoothBig * skin * (1.0 - keep2);
+  // Older skin: amplify the face's own mid-scale texture (creases, pores) rather than paint it on.
+  col += det2 * uAgeDetail * skin * (1.0 - keep2 * 0.5);
+  // Young skin keeps a fine photographic grain so smoothing never looks plastic.
+  float pore = (vnoise(p * 0.75 + uSeed) - 0.5) * 0.6 + (hash12(floor(p) + uSeed) - 0.5) * 0.4;
+  col *= 1.0 + pore * uSkinGrain * skin;
 
   // Fade eyebrows into the surrounding skin (babies have faint brows).
   float bw = a0.b * uBrowFade;
@@ -292,9 +381,9 @@ void main(){
              + texture(uAttr2, vUV + vec2(px1.x, -px1.y)).a + texture(uAttr2, vUV - vec2(px1.x, -px1.y)).a);
   float lw = lipM * uLipNat;
   if (lw > 0.002) {
-    vec3 nat = uSkinT * vec3(1.0, 0.72, 0.72);
+    vec3 nat = mix(uSkinT, uSkinT * vec3(1.0, 0.74, 0.76), 0.75);
     float L = luma(col);
-    float Lt = mix(L, luma(uSkinT) * 0.8, 0.4);
+    float Lt = mix(L, luma(uSkinT) * 0.78, 0.45);
     col = mix(col, nat * (Lt / max(luma(nat), 0.03)), clamp(lw, 0.0, 1.0));
   }
 
@@ -348,9 +437,11 @@ void main(){
     col *= 1.0 - must * uMustache * (0.12 + 0.12 * n);
   }
   if (uStubble > 0.01) {
-    float dots = smoothstep(0.45, 0.85, hash12(floor(p * 0.85) + uSeed)) * 0.6 + vnoise(p * 0.5) * 0.4;
+    // Beard shadow: a soft blue-grey cast with very fine, low-contrast follicle texture.
+    float dots = vnoise(p * 0.9 + uSeed) * 0.5 + vnoise(p * 0.35) * 0.5;
     float amt = bz * uStubble;
-    col = mix(col, col * mix(vec3(0.86, 0.87, 0.9), uBeardColor * 1.2, 0.35), amt * (0.55 + 0.45 * dots));
+    vec3 shadowTint = mix(vec3(0.84, 0.85, 0.88), uBeardColor * 1.3 + 0.25, 0.3);
+    col = mix(col, col * shadowTint, amt * (0.75 + 0.25 * dots));
   }
   if (uBeard > 0.01) {
     float strands = vnoise(vec2(p.x * 0.45, p.y * 0.09) + uSeed) * 0.6 + vnoise(p * 0.7) * 0.4;
@@ -364,8 +455,8 @@ void main(){
   vec4 wr = 0.4 * texture(uWrinkle, vUV) + 0.15 * (texture(uWrinkle, vUV + wp) + texture(uWrinkle, vUV - wp)
           + texture(uWrinkle, vUV + vec2(wp.x, -wp.y)) + texture(uWrinkle, vUV - vec2(wp.x, -wp.y)));
   float wm = uWrinkleAmt * clamp(skin + 0.25 * a0.r * a0.a, 0.0, 1.0);
-  col *= 1.0 - wr.r * 0.3 * wm * vec3(1.0, 1.06, 1.12);
-  col += wr.g * 0.045 * wm;
+  col *= 1.0 - wr.r * 0.17 * wm * vec3(1.0, 1.05, 1.1);
+  col += wr.g * 0.04 * wm;
 
   // Skin ageing: crepey texture, duller, slightly sallow, darker under the eyes, greying brows.
   float crepe = fbm(p * 0.33 + uSeed) - 0.5;

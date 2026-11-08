@@ -39,9 +39,11 @@ export function ageLook(age, sex, o) {
   const parentAge = o.parentAge ?? 30;
   const youngerThanParents = age >= 18 ? clamp((parentAge - age) / 25) : 0;
   const look = {
-    smooth: t([[0, 0.95], [1, 0.93], [3, 0.9], [6, 0.85], [10, 0.76], [13, 0.64], [16, 0.52], [20, 0.4], [25, 0.3], [32, 0.15], [45, 0.05], [90, 0]], age) + 0.35 * youngerThanParents,
-    smoothBig: t([[0, 0.9], [1, 0.82], [3, 0.68], [6, 0.52], [10, 0.36], [13, 0.24], [16, 0.14], [20, 0.06], [25, 0]], age),
-    browFade: t([[0, 0.88], [0.5, 0.78], [1, 0.66], [2, 0.5], [4, 0.32], [7, 0.15], [11, 0.05], [14, 0]], age),
+    smooth: t([[0, 0.72], [1, 0.68], [3, 0.62], [6, 0.55], [10, 0.48], [13, 0.42], [16, 0.36], [20, 0.28], [25, 0.2], [32, 0.1], [45, 0.03], [90, 0]], age) + 0.3 * youngerThanParents,
+    smoothBig: t([[0, 0.85], [1, 0.78], [3, 0.62], [6, 0.46], [10, 0.32], [13, 0.22], [16, 0.13], [20, 0.06], [25, 0]], age),
+    ageDetail: t([[40, 0], [55, 0.25], [70, 0.55], [85, 0.8]], age),
+    skinGrain: t([[0, 0.045], [3, 0.04], [10, 0.032], [16, 0.025], [25, 0.012], [35, 0]], age),
+    browFade: t([[0, 0.85], [1, 0.7], [2, 0.6], [6, 0.42], [10, 0.26], [14, 0.1], [17, 0]], age),
     rosy: t([[0, 0.65], [1, 0.58], [3, 0.48], [6, 0.34], [10, 0.22], [14, 0.12], [20, 0.06], [30, 0.03]], age),
     babySkin: t([[0, 1], [1, 0.8], [3, 0.5], [6, 0.22], [10, 0]], age),
     lipNat: boy ? 0.92 : t([[0, 0.9], [13, 0.88], [16, 0.6], [20, 0.4]], age),
@@ -52,12 +54,12 @@ export function ageLook(age, sex, o) {
     skinAge: t([[40, 0], [55, 0.2], [70, 0.55], [85, 0.9]], age),
     underEye: t([[28, 0], [40, 0.25], [55, 0.5], [75, 0.8]], age),
     gray: Math.max(0, t([[30, 0], [38, 0.08], [45, 0.2], [55, 0.45], [65, 0.7], [75, 0.86], [85, 0.95]], age) * (o.grayRate ?? 1)),
-    baby: age <= 2 ? 1 : age >= 2.6 ? 0 : smoothstep(2.6, 2.0, age),
+    baby: age <= 2 ? 1 : age >= 3.2 ? 0 : smoothstep(3.2, 2.0, age),
     fuzz: t([[0, 0.3], [0.5, 0.5], [1, 0.72], [2, 0.9]], age),
     newborn: !!o.newbornWrap && age < 0.35,
     hairLight: t([[0, 0.35], [2, 0.3], [5, 0.22], [9, 0.12], [14, 0.04], [18, 0]], age),
     eyeBaby: t([[0, 0.5], [0.5, 0.35], [1, 0.22], [2, 0.07], [3, 0]], age),
-    hairClip: age >= 2 && age < 5.5 ? lerp(0.9, 3.4, (age - 2) / 3.5) : 0,
+    hairClip: age >= 3 && age < 6 ? lerp(1.2, 3.4, (age - 3) / 3) : 0,
   };
   if (boy) {
     look.mustache = t([[12, 0], [13.5, 0.3], [15, 0.55], [16.5, 0.7], [18, 0.2], [20, 0]], age);
@@ -133,6 +135,13 @@ export class Renderer {
       b1a: this.fbo([T(CW / 2, CH / 2)]), b1b: this.fbo([T(CW / 2, CH / 2)]),
       b2a: this.fbo([T(CW / 4, CH / 4)]), b2b: this.fbo([T(CW / 4, CH / 4)]),
     };
+    // Per-parent band pyramids: half -> quarter (mid band) -> eighth (low band: lighting + colour).
+    for (const k of ['M', 'D']) {
+      this.fb[`h${k}a`] = this.fbo([T(CW / 2, CH / 2)]); this.fb[`h${k}b`] = this.fbo([T(CW / 2, CH / 2)]);
+      this.fb[`q${k}a`] = this.fbo([T(CW / 4, CH / 4)]); this.fb[`q${k}b`] = this.fbo([T(CW / 4, CH / 4)]);
+      this.fb[`e${k}a`] = this.fbo([T(CW / 8, CH / 8)]); this.fb[`e${k}b`] = this.fbo([T(CW / 8, CH / 8)]);
+      this.fb[`e${k}c`] = this.fbo([T(CW / 8, CH / 8)]); this.fb[`e${k}d`] = this.fbo([T(CW / 8, CH / 8)]);
+    }
     this.wrinkleCanvas = document.createElement('canvas');
     this.wrinkleCanvas.width = CW / 2; this.wrinkleCanvas.height = CH / 2;
     this.wctx = this.wrinkleCanvas.getContext('2d', { willReadFrequently: true });
@@ -251,8 +260,9 @@ export class Renderer {
     const eyeMidX = (e0.r.x + e0.l.x) / 2;
     const topY = ctrl[2 * RING1_START + 1];
     const chinY0 = lm[2 * LM.chin + 1];
-    const s = (0.585 * CH) / (chinY0 - topY);
-    const frame = { s, ax: eyeMidX, ay: topY, bx: CW / 2, by: 0.095 * CH };
+    const tight = smoothstep(0.5, 0.9, shape.J); // babies are framed closer, like real baby portraits
+    const s = (lerp(0.585, 0.66, tight) * CH) / (chinY0 - topY);
+    const frame = { s, ax: eyeMidX, ay: topY, bx: CW / 2, by: lerp(0.095, 0.075, tight) * CH };
     applyFrame(ctrl, frame);
     const T = applyFrame(Float32Array.from(lm), frame);
     const P = (i) => ({ x: T[2 * i], y: T[2 * i + 1] });
@@ -272,6 +282,14 @@ export class Renderer {
       const oval = OVAL_SET.has(i);
       let w = clamp(lerp(0.5, shape.w[i], 0.9) + (p.genes.texture ?? 0.5) - 0.5);
       w *= 1 - dadBeard * this.beardZone[i];
+      // Eye makeup is not inherited: take eyelid texture from the parent without it.
+      const eyeZone = this.inf.eyes[i];
+      if (eyeZone > 0.05) {
+        const keepMakeup = !boy && p.age >= 16 ? 0.5 : 0;
+        const score = (r) => clamp((0.38 - (r ?? 0.45)) / 0.12);
+        const mM = score(mom.stats.eyeRingRatio), mD = score(dad.stats.eyeRingRatio);
+        w = clamp(w + eyeZone * (1 - keepMakeup) * 0.9 * (mM - mD));
+      }
       if (oval) w = lerp(w, baseW, 0.85);
       a0.set([oval ? 0 : 1, w, BROW_SET.has(i) ? 1 : 0, 0], k * 4);
     });
@@ -344,11 +362,22 @@ export class Renderer {
     const rx = (sideHalf * 1.1) / Math.sqrt(Math.max(0.25, 1 - ((ySide - headCy) / ry) ** 2));
     const earY = eyeY + 0.36 * u;
     const earHalf = rx * Math.sqrt(Math.max(0.05, 1 - ((earY - headCy) / ry) ** 2));
-    const earW = 0.17 * u, earH = 0.34 * u;
+    const earW = 0.15 * u, earH = 0.3 * u;
     const chinY = P(LM.chin).y;
     const brimY = lerp(P(LM.foreheadTop).y, Math.min(P(105).y, P(334).y), 0.45);
     const fc = { x: cx, y: lerp(P(LM.glabella).y, P(LM.foreheadTop).y, 0.45) };
     const fh = new Float32Array([fc.x, fc.y, fc.x - 0.22 * u, fc.y, fc.x + 0.22 * u, fc.y, fc.x - 0.12 * u, fc.y + 0.12 * u, fc.x + 0.12 * u, fc.y + 0.12 * u]);
+
+    // Pass 2b: band pyramids of each warped parent (mid band = quarter res, low band = eighth res).
+    const bands = {};
+    for (const k of ['M', 'D']) {
+      const src = (k === 'M' ? this.fb.warpM : this.fb.warpD).texs[0];
+      this.blur(src, this.fb[`h${k}a`], this.fb[`h${k}b`]);
+      this.blur(this.fb[`h${k}b`].texs[0], this.fb[`q${k}a`], this.fb[`q${k}b`]);
+      this.blur(this.fb[`q${k}b`].texs[0], this.fb[`e${k}a`], this.fb[`e${k}b`]);
+      this.blur(this.fb[`e${k}b`].texs[0], this.fb[`e${k}c`], this.fb[`e${k}d`]);
+      bands[k] = { mid: this.fb[`q${k}b`].texs[0], low: this.fb[`e${k}d`].texs[0] };
+    }
 
     // Pass 3: compose.
     const c = this.progs.compose;
@@ -360,6 +389,10 @@ export class Renderer {
     this.bindTex(c.u.uColM, this.fb.warpM.texs[0], 0); this.bindTex(c.u.uMaskM, this.fb.warpM.texs[1], 1);
     this.bindTex(c.u.uColD, this.fb.warpD.texs[0], 2); this.bindTex(c.u.uMaskD, this.fb.warpD.texs[1], 3);
     this.bindTex(c.u.uAttr0, this.fb.attr.texs[0], 4); this.bindTex(c.u.uAttr1, this.fb.attr.texs[1], 5); this.bindTex(c.u.uAttr2, this.fb.attr.texs[2], 6);
+    this.bindTex(c.u.uMidM, bands.M.mid, 7); this.bindTex(c.u.uLowM, bands.M.low, 8);
+    this.bindTex(c.u.uMidD, bands.D.mid, 9); this.bindTex(c.u.uLowD, bands.D.low, 10);
+    gl.uniform1f(c.u.uLightFromBase, 0.35);
+    gl.uniform1f(c.u.uFineBias, boy ? 0.15 : -0.15);
     gl.uniform2f(c.u.uSize, CW, CH); gl.uniform1f(c.u.uU, u);
     gl.uniform3fv(c.u.uGainM, gM); gl.uniform3fv(c.u.uGainD, gD); gl.uniform3fv(c.u.uSkinT, n255(skinT));
     gl.uniform1f(c.u.uBaseW, baseW); gl.uniform3fv(c.u.uBgSrc, n255(base.stats.bgRgb.map((v, k) => v * gB[k])));
@@ -371,13 +404,16 @@ export class Renderer {
     gl.uniform3fv(c.u.uHairSrc, n255(hairSrc)); gl.uniform3fv(c.u.uHairT, n255(hairT));
     gl.uniform1f(c.u.uHairRecolor, recolor); gl.uniform1f(c.u.uGray, look.gray); gl.uniform1f(c.u.uSeed, (o.seed ?? 1) * 7.13);
     gl.uniform3fv(c.u.uBg1, bd[0]); gl.uniform3fv(c.u.uBg2, bd[1]); gl.uniform1f(c.u.uBgMode, bd[2]);
-    gl.uniform1f(c.u.uBaby, look.baby); gl.uniform1f(c.u.uFuzz, look.fuzz);
+    // The drawn newborn head (hat + blanket) is an opt-in style; otherwise babies come from the real photo.
+    gl.uniform1f(c.u.uBaby, look.newborn ? 1 : 0); gl.uniform1f(c.u.uBabySoft, look.newborn ? 0 : look.baby); gl.uniform1f(c.u.uFuzz, look.fuzz);
     gl.uniform1f(c.u.uWrap, look.newborn ? 1 : 0);
     gl.uniform1f(c.u.uHatBrim, brimY); gl.uniform1f(c.u.uHatCurve, 0.45 * u);
     gl.uniform4f(c.u.uHead, cx, headCy, rx, ry);
-    gl.uniform4f(c.u.uEarR, cx - earHalf + earW * 0.15, earY, earW, earH);
-    gl.uniform4f(c.u.uEarL, cx + earHalf - earW * 0.15, earY, earW, earH);
+    gl.uniform4f(c.u.uEarR, cx - earHalf + earW * 0.45, earY, earW, earH);
+    gl.uniform4f(c.u.uEarL, cx + earHalf - earW * 0.45, earY, earW, earH);
     gl.uniform1f(c.u.uChinY, chinY); gl.uniform1f(c.u.uCX, cx);
+    gl.uniform1f(c.u.uHairTop, P(LM.foreheadTop).y);
+    gl.uniform1f(c.u.uBrowTop, Math.min(...[...BROW_R_UPPER, ...BROW_L_UPPER].map((i) => P(i).y)));
     gl.uniform3fv(c.u.uFabric, fab[0]); gl.uniform3fv(c.u.uFabric2, fab[1]);
     gl.uniform3fv(c.u.uStripe1, [0.9, 0.55, 0.64]); gl.uniform3fv(c.u.uStripe2, [0.5, 0.66, 0.86]);
     gl.uniform1f(c.u.uHairClipY, look.hairClip > 0 && o.hairClip !== false ? chinY + (look.hairClip - 1) * u : 0);
@@ -405,6 +441,7 @@ export class Renderer {
     this.bindTex(f.u.uWrinkle, this.wrinkleTex, 6);
     gl.uniform2f(f.u.uSize, CW, CH); gl.uniform1f(f.u.uU, u); gl.uniform1f(f.u.uSeed, (o.seed ?? 1) * 3.7);
     gl.uniform1f(f.u.uSmooth, clamp(look.smooth)); gl.uniform1f(f.u.uSmoothBig, look.smoothBig);
+    gl.uniform1f(f.u.uAgeDetail, look.ageDetail); gl.uniform1f(f.u.uSkinGrain, look.skinGrain);
     gl.uniform1f(f.u.uBrowFade, look.browFade); gl.uniform1f(f.u.uBrowOff, 0.13 * u);
     gl.uniform1f(f.u.uRosy, look.rosy); gl.uniform1f(f.u.uBabySkin, look.babySkin);
     gl.uniform1f(f.u.uLipNat, look.lipNat * (0.55 + 0.45 * Math.max(mom.stats.lipstick, boy ? 0.6 : 0)));
@@ -414,7 +451,7 @@ export class Renderer {
     // Eyes.
     const irisR = this.irisTarget(T, IRIS_R), irisL = this.irisTarget(T, IRIS_L);
     gl.uniform4f(f.u.uIrisR, irisR.x, irisR.y, irisR.r, 0); gl.uniform4f(f.u.uIrisL, irisL.x, irisL.y, irisL.r, 0);
-    gl.uniform1f(f.u.uIrisMag, 1 + 0.2 * J);
+    gl.uniform1f(f.u.uIrisMag, 1 + 0.12 * J);
     const eyeInfo = this.eyeColor(p.eye, look.eyeBaby);
     gl.uniform3fv(f.u.uEyeColor, n255(eyeInfo.rgb)); gl.uniform1f(f.u.uEyeRecolor, eyeInfo.strength);
     const irisSrc = mixRgb((mom.stats.irisRgb || [80, 60, 45]).map((v, k) => v * gM[k]), (dad.stats.irisRgb || [80, 60, 45]).map((v, k) => v * gD[k]), 0.5);
@@ -566,10 +603,10 @@ export class Renderer {
       const a = { x: sub.x + sgn * 0.3 * u, y: sub.y - 0.07 * u };
       const b = { x: corner.x + sgn * 0.1 * u, y: corner.y + 0.14 * u };
       const ctrl = { x: (a.x + b.x) / 2 + sgn * 0.12 * u, y: (a.y + b.y) / 2 };
-      stroke(curvePts(a, b, ctrl, 10), 0.05, W.naso, { x: sgn * 0.045, y: -0.02 });
+      stroke(curvePts(a, b, ctrl, 10), 0.075, W.naso, { x: sgn * 0.06, y: -0.025 });
       const m0 = { x: corner.x + sgn * 0.03 * u, y: corner.y + 0.05 * u };
       const m1 = { x: corner.x + sgn * 0.11 * u, y: corner.y + 0.42 * u };
-      stroke(curvePts(m0, m1, { x: m0.x + sgn * 0.03 * u, y: (m0.y + m1.y) / 2 }, 6), 0.04, W.marionette, { x: sgn * 0.035, y: 0 });
+      stroke(curvePts(m0, m1, { x: m0.x + sgn * 0.03 * u, y: (m0.y + m1.y) / 2 }, 6), 0.06, W.marionette * 0.8, { x: sgn * 0.045, y: 0 });
     }
     // Lip lines.
     const top = P(LM.upperLipTop);

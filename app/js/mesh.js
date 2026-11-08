@@ -1,9 +1,9 @@
 // MediaPipe Face Mesh topology helpers: landmark groups, canonical frame, triangulation.
 
-export const CW = 768;          // canonical frame width (px)
-export const CH = 960;          // canonical frame height (px)
-export const IPD = 150;         // distance between eye centres in the canonical frame
-export const EYE_Y = 404;       // eye line in the canonical frame
+export const CW = 1024;         // canonical frame width (px)
+export const CH = 1280;         // canonical frame height (px)
+export const IPD = 200;         // distance between eye centres in the canonical frame
+export const EYE_Y = 538;       // eye line in the canonical frame
 export const CX = CW / 2;
 
 export const N_LM = 478;
